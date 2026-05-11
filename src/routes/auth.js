@@ -15,7 +15,6 @@ function signToken(user) {
   return jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN||'7d' });
 }
 
-// POST /api/auth/register
 router.post('/register', [
   body('name').trim().notEmpty().withMessage('Name required').isLength({min:2,max:60}),
   body('email').isEmail().normalizeEmail(),
@@ -25,19 +24,18 @@ router.post('/register', [
   try {
     const { name, email, password, role='member' } = req.body;
     const db = getDB();
-    if (db.get('SELECT id FROM users WHERE email=?', email))
-      return res.status(409).json({ success:false, message:'Email already registered' });
+    const existing = await db.get('SELECT id FROM users WHERE email=?', email);
+    if (existing) return res.status(409).json({ success:false, message:'Email already registered' });
     const hash = await bcrypt.hash(password, 10);
     const id = uuidv4();
     const color = COLORS[Math.floor(Math.random()*COLORS.length)];
-    db.run('INSERT INTO users (id,name,email,password,role,color) VALUES (?,?,?,?,?,?)', id, name, email, hash, role, color);
-    db.run('INSERT INTO activity_logs (id,user_id,action,entity_type,entity_name) VALUES (?,?,?,?,?)', uuidv4(), id, 'joined the workspace', 'user', name);
-    const user = db.get('SELECT id,name,email,role,color,created_at FROM users WHERE id=?', id);
+    await db.run('INSERT INTO users (id,name,email,password,role,color) VALUES (?,?,?,?,?,?)', id, name, email, hash, role, color);
+    await db.run('INSERT INTO activity_logs (id,user_id,action,entity_type,entity_name) VALUES (?,?,?,?,?)', uuidv4(), id, 'joined the workspace', 'user', name);
+    const user = await db.get('SELECT id,name,email,role,color,created_at FROM users WHERE id=?', id);
     res.status(201).json({ success:true, data:{ token:signToken(user), user } });
   } catch(err) { next(err); }
 });
 
-// POST /api/auth/login
 router.post('/login', [
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty(),
@@ -45,22 +43,20 @@ router.post('/login', [
   try {
     const { email, password } = req.body;
     const db = getDB();
-    const user = db.get('SELECT * FROM users WHERE email=?', email);
+    const user = await db.get('SELECT * FROM users WHERE email=?', email);
     if (!user) return res.status(401).json({ success:false, message:'Invalid email or password' });
     if (!await bcrypt.compare(password, user.password))
       return res.status(401).json({ success:false, message:'Invalid email or password' });
-    db.run('INSERT INTO activity_logs (id,user_id,action,entity_type,entity_name) VALUES (?,?,?,?,?)', uuidv4(), user.id, 'logged in', 'user', user.name);
+    await db.run('INSERT INTO activity_logs (id,user_id,action,entity_type,entity_name) VALUES (?,?,?,?,?)', uuidv4(), user.id, 'logged in', 'user', user.name);
     const { password:_, ...safe } = user;
     res.json({ success:true, data:{ token:signToken(safe), user:safe } });
   } catch(err) { next(err); }
 });
 
-// GET /api/auth/me
 router.get('/me', authenticate, (req, res) => {
   res.json({ success:true, data:{ user:req.user } });
 });
 
-// PUT /api/auth/profile
 router.put('/profile', authenticate, [
   body('name').optional().trim().notEmpty().isLength({max:60}),
   body('email').optional().isEmail().normalizeEmail(),
@@ -70,16 +66,16 @@ router.put('/profile', authenticate, [
     const { name, email, password } = req.body;
     const db = getDB();
     if (email) {
-      const ex = db.get('SELECT id FROM users WHERE email=?', email);
+      const ex = await db.get('SELECT id FROM users WHERE email=?', email);
       if (ex && ex.id !== req.user.id) return res.status(409).json({ success:false, message:'Email already in use' });
     }
-    const fields = [], vals = [];
+    const fields=[], vals=[];
     if (name)     { fields.push('name=?');     vals.push(name); }
     if (email)    { fields.push('email=?');    vals.push(email); }
     if (password) { fields.push('password=?'); vals.push(await bcrypt.hash(password,10)); }
     fields.push('updated_at=?'); vals.push(new Date().toISOString());
-    if (fields.length > 1) db.run(`UPDATE users SET ${fields.join(',')} WHERE id=?`, ...vals, req.user.id);
-    const user = db.get('SELECT id,name,email,role,color,created_at FROM users WHERE id=?', req.user.id);
+    if (fields.length > 1) await db.run(`UPDATE users SET ${fields.join(',')} WHERE id=?`, ...vals, req.user.id);
+    const user = await db.get('SELECT id,name,email,role,color,created_at FROM users WHERE id=?', req.user.id);
     res.json({ success:true, data:{ user } });
   } catch(err) { next(err); }
 });
