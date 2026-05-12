@@ -13,7 +13,7 @@ app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'Nexus API running', version: '1.0.0', timestamp: new Date().toISOString() });
+  res.json({ success: true, message: 'Nexus API running', version: '2.0.0', timestamp: new Date().toISOString() });
 });
 
 app.use('/api/auth',      require('./routes/auth'));

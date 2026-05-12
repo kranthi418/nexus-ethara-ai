@@ -21,10 +21,7 @@ const errorHandler = (err, req, res, next) => {
   if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
     return res.status(409).json({ success: false, message: 'A record with this value already exists' });
   }
-  res.status(err.status || 500).json({
-    success: false,
-    message: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
-  });
+  res.status(err.status || 500).json({ success: false, message: err.message || 'Internal server error' });
 };
 
 module.exports = { validate, notFound, errorHandler };
