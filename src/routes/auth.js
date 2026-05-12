@@ -45,15 +45,15 @@ router.post('/login', [
     const db = getDB();
     const user = await db.get('SELECT * FROM users WHERE email=?', email);
     if (!user) return res.status(401).json({ success:false, message:'Invalid email or password' });
-    if (!await bcrypt.compare(password, user.password))
-      return res.status(401).json({ success:false, message:'Invalid email or password' });
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ success:false, message:'Invalid email or password' });
     await db.run('INSERT INTO activity_logs (id,user_id,action,entity_type,entity_name) VALUES (?,?,?,?,?)', uuidv4(), user.id, 'logged in', 'user', user.name);
     const { password:_, ...safe } = user;
     res.json({ success:true, data:{ token:signToken(safe), user:safe } });
   } catch(err) { next(err); }
 });
 
-router.get('/me', authenticate, (req, res) => {
+router.get('/me', authenticate, async (req, res) => {
   res.json({ success:true, data:{ user:req.user } });
 });
 
